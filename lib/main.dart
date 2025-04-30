@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'models/todo_model.dart';
@@ -28,6 +29,17 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Configure Firestore settings
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+  );
+
+  // Enable offline persistence
+  if (!kIsWeb) {  // Only enable persistence on mobile platforms
+    await FirebaseFirestore.instance.enablePersistence();
+  }
   
   runApp(const ProviderScope(child: MyApp()));
 }
@@ -39,55 +51,96 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Voice To-Do',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF7C4DFF), // Deep purple accent
+          seedColor: const Color(0xFF6366F1),
           brightness: Brightness.light,
-          primary: const Color(0xFF7C4DFF),
-          secondary: const Color(0xFF00BFA5), // Teal accent
-          tertiary: const Color(0xFFFF4081), // Pink accent
+          primary: const Color(0xFF6366F1),
+          secondary: const Color(0xFF10B981),
+          tertiary: const Color(0xFFF43F5E),
           surface: Colors.white,
-          background: const Color(0xFFF8F9FA),
+          background: const Color(0xFFF8FAFC),
+          surfaceVariant: const Color(0xFFE2E8F0),
+          primaryContainer: const Color(0xFFEEF2FF),
+          secondaryContainer: const Color(0xFFECFDF5),
+          tertiaryContainer: const Color(0xFFFFE4E6),
         ),
         useMaterial3: true,
-        textTheme: GoogleFonts.poppinsTextTheme(),
+        textTheme: GoogleFonts.interTextTheme(),
         cardTheme: CardTheme(
-          elevation: 2,
+          elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
           ),
           clipBehavior: Clip.antiAlias,
         ),
         floatingActionButtonTheme: FloatingActionButtonThemeData(
-          elevation: 4,
+          elevation: 2,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: const Color(0xFFF1F5F9),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: Color(0xFF6366F1), width: 2),
           ),
         ),
       ),
       darkTheme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF7C4DFF),
+          seedColor: const Color(0xFF6366F1),
           brightness: Brightness.dark,
-          primary: const Color(0xFF7C4DFF),
-          secondary: const Color(0xFF00BFA5),
-          tertiary: const Color(0xFFFF4081),
-          surface: const Color(0xFF1E1E1E),
-          background: const Color(0xFF121212),
+          primary: const Color(0xFF818CF8),
+          secondary: const Color(0xFF34D399),
+          tertiary: const Color(0xFFFB7185),
+          surface: const Color(0xFF1E1B4B),
+          background: const Color(0xFF0F172A),
+          surfaceVariant: const Color(0xFF334155),
+          primaryContainer: const Color(0xFF312E81),
+          secondaryContainer: const Color(0xFF065F46),
+          tertiaryContainer: const Color(0xFF881337),
         ),
         useMaterial3: true,
-        textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
+        textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
         cardTheme: CardTheme(
-          elevation: 2,
+          elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
           ),
           clipBehavior: Clip.antiAlias,
         ),
         floatingActionButtonTheme: FloatingActionButtonThemeData(
-          elevation: 4,
+          elevation: 2,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: const Color(0xFF1E293B),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: Color(0xFF818CF8), width: 2),
           ),
         ),
       ),
@@ -279,13 +332,15 @@ class _HomePageState extends ConsumerState<HomePage> {
   Widget build(BuildContext context) {
     final todos = ref.watch(todosProvider);
     final colorScheme = Theme.of(context).colorScheme;
+    final isLight = Theme.of(context).brightness == Brightness.light;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
           'Voice To-Do',
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
             fontWeight: FontWeight.w600,
+            fontSize: 24,
           ),
         ),
         centerTitle: true,
@@ -293,7 +348,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         backgroundColor: colorScheme.surface,
         actions: [
           IconButton(
-            icon: const Icon(Icons.sync),
+            icon: const Icon(Icons.sync_rounded),
             onPressed: () {
               // TODO: Implement sync functionality
             },
@@ -319,25 +374,50 @@ class _HomePageState extends ConsumerState<HomePage> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
-                            Icons.mic_none,
-                            size: 80,
-                            color: colorScheme.primary.withOpacity(0.5),
+                          Container(
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(32),
+                            ),
+                            child: Icon(
+                              Icons.mic_none_rounded,
+                              size: 64,
+                              color: colorScheme.primary,
+                            ),
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 32),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                             decoration: BoxDecoration(
-                              color: colorScheme.primaryContainer.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(16),
+                              color: colorScheme.surfaceVariant.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: colorScheme.primary.withOpacity(0.1),
+                                width: 2,
+                              ),
                             ),
-                            child: Text(
-                              'No tasks yet\nTry saying: "Create task title: Buy groceries"',
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    color: colorScheme.onSurface.withOpacity(0.8),
+                            child: Column(
+                              children: [
+                                Text(
+                                  'No tasks yet',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.primary,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Try saying: "Create task title: Buy groceries"',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 16,
+                                    color: colorScheme.onSurfaceVariant,
                                     height: 1.5,
                                   ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -358,7 +438,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                                 },
                                 backgroundColor: colorScheme.errorContainer,
                                 foregroundColor: colorScheme.onErrorContainer,
-                                icon: Icons.delete_outline,
+                                icon: Icons.delete_outline_rounded,
                                 label: 'Delete',
                                 borderRadius: BorderRadius.circular(16),
                               ),
@@ -374,16 +454,26 @@ class _HomePageState extends ConsumerState<HomePage> {
                                     width: 4,
                                   ),
                                 ),
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    todo.isCompleted
+                                        ? colorScheme.secondaryContainer.withOpacity(0.5)
+                                        : colorScheme.primaryContainer.withOpacity(0.5),
+                                    colorScheme.surface,
+                                  ],
+                                ),
                               ),
                               child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                                 title: Text(
                                   todo.title,
-                                  style: TextStyle(
+                                  style: GoogleFonts.inter(
                                     decoration: todo.isCompleted ? TextDecoration.lineThrough : null,
                                     fontSize: 16,
                                     fontWeight: FontWeight.w500,
-                                    color: todo.isCompleted 
+                                    color: todo.isCompleted
                                         ? colorScheme.onSurface.withOpacity(0.6)
                                         : colorScheme.onSurface,
                                   ),
@@ -395,28 +485,39 @@ class _HomePageState extends ConsumerState<HomePage> {
                                       const SizedBox(height: 8),
                                       Text(
                                         todo.description,
-                                        style: TextStyle(
+                                        style: GoogleFonts.inter(
                                           color: colorScheme.onSurfaceVariant,
                                           height: 1.5,
                                         ),
                                       ),
                                     ],
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          Icons.access_time,
-                                          size: 14,
-                                          color: colorScheme.onSurfaceVariant.withOpacity(0.7),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          DateFormat('MMM d, y • h:mm a').format(todo.createdAt),
-                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    const SizedBox(height: 12),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: isLight
+                                            ? colorScheme.surfaceVariant.withOpacity(0.5)
+                                            : colorScheme.surfaceVariant.withOpacity(0.2),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.schedule_rounded,
+                                            size: 14,
                                             color: colorScheme.onSurfaceVariant.withOpacity(0.7),
                                           ),
-                                        ),
-                                      ],
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            DateFormat('MMM d, y • h:mm a').format(todo.createdAt),
+                                            style: GoogleFonts.inter(
+                                              fontSize: 12,
+                                              color: colorScheme.onSurfaceVariant.withOpacity(0.7),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -424,82 +525,27 @@ class _HomePageState extends ConsumerState<HomePage> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     IconButton(
-                                      icon: const Icon(Icons.edit_outlined),
-                                      onPressed: () {
-                                        _titleController.text = todo.title;
-                                        _descriptionController.text = todo.description;
-                                        showDialog(
-                                          context: context,
-                                          builder: (context) => AlertDialog(
-                                            title: const Text('Edit Task'),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(20),
-                                            ),
-                                            content: Column(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                TextField(
-                                                  controller: _titleController,
-                                                  decoration: InputDecoration(
-                                                    labelText: 'Title',
-                                                    border: OutlineInputBorder(
-                                                      borderRadius: BorderRadius.circular(12),
-                                                    ),
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 16),
-                                                TextField(
-                                                  controller: _descriptionController,
-                                                  decoration: InputDecoration(
-                                                    labelText: 'Description',
-                                                    border: OutlineInputBorder(
-                                                      borderRadius: BorderRadius.circular(12),
-                                                    ),
-                                                  ),
-                                                  maxLines: 3,
-                                                ),
-                                              ],
-                                            ),
-                                            actions: [
-                                              TextButton(
-                                                onPressed: () => Navigator.pop(context),
-                                                child: Text(
-                                                  'Cancel',
-                                                  style: TextStyle(color: colorScheme.secondary),
-                                                ),
-                                              ),
-                                              FilledButton(
-                                                onPressed: () {
-                                                  if (_titleController.text.isNotEmpty) {
-                                                    final updatedTodo = todo.copyWith(
-                                                      title: _titleController.text,
-                                                      description: _descriptionController.text,
-                                                    );
-                                                    ref.read(todosProvider.notifier).updateTodo(updatedTodo);
-                                                    Navigator.pop(context);
-                                                  }
-                                                },
-                                                style: FilledButton.styleFrom(
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius: BorderRadius.circular(12),
-                                                  ),
-                                                ),
-                                                child: const Text('Save'),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      },
+                                      icon: const Icon(Icons.edit_rounded),
+                                      style: IconButton.styleFrom(
+                                        backgroundColor: colorScheme.surfaceVariant.withOpacity(0.5),
+                                      ),
+                                      onPressed: () => _showEditDialog(todo),
                                     ),
+                                    const SizedBox(width: 8),
                                     IconButton(
                                       icon: Icon(
-                                        todo.isCompleted 
-                                            ? Icons.check_circle
-                                            : Icons.check_circle_outline,
-                                        color: todo.isCompleted
-                                            ? colorScheme.secondary
-                                            : colorScheme.onSurfaceVariant,
+                                        todo.isCompleted
+                                            ? Icons.check_circle_rounded
+                                            : Icons.check_circle_outline_rounded,
                                       ),
+                                      style: IconButton.styleFrom(
+                                        backgroundColor: todo.isCompleted
+                                            ? colorScheme.secondaryContainer.withOpacity(0.5)
+                                            : colorScheme.surfaceVariant.withOpacity(0.5),
+                                      ),
+                                      color: todo.isCompleted
+                                          ? colorScheme.secondary
+                                          : colorScheme.onSurfaceVariant,
                                       onPressed: () {
                                         ref.read(todosProvider.notifier).toggleTodo(todo.id);
                                       },
@@ -514,14 +560,14 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ),
             ),
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: colorScheme.surface,
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.05),
-                    blurRadius: 16,
-                    offset: const Offset(0, -4),
+                    blurRadius: 20,
+                    offset: const Offset(0, -5),
                   ),
                 ],
               ),
@@ -529,41 +575,52 @@ class _HomePageState extends ConsumerState<HomePage> {
                 children: [
                   if (_lastWords.isNotEmpty)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      margin: const EdgeInsets.only(bottom: 20),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                       decoration: BoxDecoration(
-                        color: colorScheme.primaryContainer.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(16),
+                        color: colorScheme.primaryContainer.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(20),
                         border: Border.all(
                           color: colorScheme.primary.withOpacity(0.2),
+                          width: 2,
                         ),
                       ),
                       child: Row(
                         children: [
-                          Icon(
-                            Icons.mic,
-                            color: colorScheme.primary,
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              Icons.mic_rounded,
+                              color: colorScheme.primary,
+                            ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 16),
                           Expanded(
                             child: Text(
                               _lastWords,
-                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              style: GoogleFonts.inter(
+                                fontSize: 16,
                                 color: colorScheme.onSurface,
+                                height: 1.5,
                               ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                  const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       FloatingActionButton.extended(
                         heroTag: 'add',
                         onPressed: _showAddTodoDialog,
-                        icon: const Icon(Icons.add),
+                        icon: const Icon(Icons.add_rounded),
                         label: const Text('Add Task'),
+                        elevation: 0,
                       ),
                       FloatingActionButton(
                         heroTag: 'mic',
@@ -571,8 +628,9 @@ class _HomePageState extends ConsumerState<HomePage> {
                         backgroundColor: _isListening
                             ? colorScheme.error
                             : colorScheme.primary,
+                        elevation: 0,
                         child: Icon(
-                          _isListening ? Icons.mic : Icons.mic_none,
+                          _isListening ? Icons.mic_rounded : Icons.mic_none_rounded,
                           color: colorScheme.onPrimary,
                         ),
                       ),
@@ -587,6 +645,73 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
+  void _showEditDialog(Todo todo) {
+    _titleController.text = todo.title;
+    _descriptionController.text = todo.description;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Edit Task',
+          style: GoogleFonts.inter(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(
+                labelText: 'Title',
+                hintText: 'Enter task title',
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                hintText: 'Enter task description (optional)',
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: Theme.of(context).colorScheme.secondary),
+            ),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (_titleController.text.isNotEmpty) {
+                final updatedTodo = todo.copyWith(
+                  title: _titleController.text,
+                  description: _descriptionController.text,
+                );
+                ref.read(todosProvider.notifier).updateTodo(updatedTodo);
+                Navigator.pop(context);
+              }
+            },
+            style: FilledButton.styleFrom(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _showAddTodoDialog() async {
     _titleController.clear();
     _descriptionController.clear();
@@ -594,32 +719,31 @@ class _HomePageState extends ConsumerState<HomePage> {
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Add New Task'),
+        title: Text(
+          'Add New Task',
+          style: GoogleFonts.inter(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(24),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: _titleController,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: 'Title',
                 hintText: 'Enter task title',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
               ),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _descriptionController,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: 'Description',
                 hintText: 'Enter task description (optional)',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
               ),
               maxLines: 3,
             ),

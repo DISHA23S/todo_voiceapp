@@ -4,7 +4,7 @@ import 'package:uuid/uuid.dart';
 part 'todo_model.g.dart';
 
 @HiveType(typeId: 0)
-class Todo {
+class Todo extends HiveObject {
   @HiveField(0)
   final String id;
 
@@ -38,9 +38,9 @@ class Todo {
     DateTime? updatedAt,
     this.completedAt,
     this.isSynced = false,
-  })  : id = id ?? const Uuid().v4(),
-        createdAt = createdAt ?? DateTime.now(),
-        updatedAt = updatedAt ?? DateTime.now();
+  })  : this.id = id ?? const Uuid().v4(),
+        this.createdAt = createdAt ?? DateTime.now(),
+        this.updatedAt = updatedAt ?? DateTime.now();
 
   Todo copyWith({
     String? title,
@@ -85,5 +85,10 @@ class Todo {
       completedAt: json['completedAt'] != null ? DateTime.parse(json['completedAt'] as String) : null,
       isSynced: json['isSynced'] as bool? ?? false,
     );
+  }
+
+  @override
+  String toString() {
+    return 'Todo(id: $id, title: $title, description: $description, isCompleted: $isCompleted)';
   }
 } 

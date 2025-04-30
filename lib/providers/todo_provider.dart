@@ -1,15 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/todo_model.dart';
-import '../services/firebase_service.dart';
-
-final firebaseServiceProvider = Provider<FirebaseService>((ref) {
-  return FirebaseService();
-});
-
-final todoBoxProvider = FutureProvider<Box<Todo>>((ref) async {
-  return Hive.box<Todo>('todos');
-});
 
 final todosProvider = StateNotifierProvider<TodoNotifier, List<Todo>>((ref) {
   return TodoNotifier();
@@ -17,140 +9,123 @@ final todosProvider = StateNotifierProvider<TodoNotifier, List<Todo>>((ref) {
 
 class TodoNotifier extends StateNotifier<List<Todo>> {
   TodoNotifier() : super([]) {
-    _initialize();
+    _initializeTodos();
   }
 
-  final _todoBox = Hive.box<Todo>('todos');
-  final _firebaseService = FirebaseService();
-  bool _isInitialized = false;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final Box<Todo> _localBox = Hive.box<Todo>('todos');
 
-  Future<void> _initialize() async {
-    if (_isInitialized) return;
-    
+  Future<void> _initializeTodos() async {
     try {
-      // Initialize Firebase service
-      await _firebaseService.initialize();
-      
-      // Load local todos first
-      final localTodos = _todoBox.values.toList();
+      // Load from local storage first
+      final localTodos = _localBox.values.toList();
       state = localTodos;
-      
-      // Listen to Firebase changes
-      _firebaseService.getTodosStream().listen((remoteTodos) {
-        _handleRemoteTodos(remoteTodos);
+
+      // Then try to sync with Firestore
+      final snapshot = await _firestore.collection('todos').get();
+      final remoteTodos = snapshot.docs.map((doc) {
+        final data = doc.data();
+        return Todo.fromJson({...data, 'id': doc.id});
+      }).toList();
+
+      // Merge local and remote todos
+      final mergedTodos = _mergeTodos(localTodos, remoteTodos);
+      state = mergedTodos;
+
+      // Listen for real-time updates
+      _firestore.collection('todos').snapshots().listen((snapshot) {
+        final remoteTodos = snapshot.docs.map((doc) {
+          final data = doc.data();
+          return Todo.fromJson({...data, 'id': doc.id});
+        }).toList();
+        
+        state = _mergeTodos(state, remoteTodos);
       });
-
-      // Initial fetch from Firebase
-      final initialRemoteTodos = await _firebaseService.fetchInitialTodos();
-      if (initialRemoteTodos.isNotEmpty) {
-        _handleRemoteTodos(initialRemoteTodos);
-      }
-
-      _isInitialized = true;
     } catch (e) {
       print('Error initializing TodoNotifier: $e');
-      // If Firebase fails, still show local todos
-      state = _todoBox.values.toList();
+      // If Firestore fails, just use local data
+      state = _localBox.values.toList();
     }
   }
 
-  void _handleRemoteTodos(List<Todo> remoteTodos) {
-    final localTodos = List<Todo>.from(state);
-    final updatedTodos = <Todo>[];
-    final Map<String, Todo> todoMap = {};
-
-    // First, add all remote todos to the map
-    for (final todo in remoteTodos) {
-      todoMap[todo.id] = todo;
+  List<Todo> _mergeTodos(List<Todo> local, List<Todo> remote) {
+    final Map<String, Todo> merged = {};
+    
+    // Add all local todos
+    for (var todo in local) {
+      merged[todo.id] = todo;
     }
-
-    // Then, add local todos that are not in remote or are more recent
-    for (final localTodo in localTodos) {
-      final remoteTodo = todoMap[localTodo.id];
-      if (remoteTodo == null || localTodo.updatedAt.isAfter(remoteTodo.updatedAt)) {
-        todoMap[localTodo.id] = localTodo;
+    
+    // Add/update with remote todos
+    for (var todo in remote) {
+      final localTodo = merged[todo.id];
+      if (localTodo == null || todo.updatedAt.isAfter(localTodo.updatedAt)) {
+        merged[todo.id] = todo;
       }
     }
-
-    // Convert map back to list and sort by creation date
-    updatedTodos.addAll(todoMap.values);
-    updatedTodos.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
-    // Update state and local storage
-    state = updatedTodos;
-    _saveToLocal(updatedTodos);
-  }
-
-  Future<void> _saveToLocal(List<Todo> todos) async {
-    await _todoBox.clear();
-    for (final todo in todos) {
-      await _todoBox.put(todo.id, todo);
-    }
+    
+    return merged.values.toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   Future<void> addTodo(Todo todo) async {
-    state = [...state, todo];
-    await _todoBox.put(todo.id, todo);
     try {
-      await _firebaseService.addTodo(todo);
+      // Add to Firestore
+      final docRef = await _firestore.collection('todos').add(todo.toJson());
+      final newTodo = todo.copyWith(title: todo.title);
+      
+      // Add to local storage
+      await _localBox.put(docRef.id, newTodo);
+      
+      state = [newTodo, ...state];
     } catch (e) {
-      print('Error adding todo to Firebase: $e');
+      print('Error adding todo: $e');
+      // If Firestore fails, just add locally
+      await _localBox.put(todo.id, todo);
+      state = [todo, ...state];
     }
   }
 
   Future<void> updateTodo(Todo todo) async {
-    state = [
-      for (final t in state)
-        if (t.id == todo.id) todo else t
-    ];
-    
-    await _todoBox.put(todo.id, todo);
     try {
-      await _firebaseService.updateTodo(todo);
+      // Update in Firestore
+      await _firestore.collection('todos').doc(todo.id).update(todo.toJson());
+      
+      // Update in local storage
+      await _localBox.put(todo.id, todo);
+      
+      state = state.map((t) => t.id == todo.id ? todo : t).toList();
     } catch (e) {
-      print('Error updating todo in Firebase: $e');
+      print('Error updating todo: $e');
+      // If Firestore fails, just update locally
+      await _localBox.put(todo.id, todo);
+      state = state.map((t) => t.id == todo.id ? todo : t).toList();
     }
   }
 
   Future<void> deleteTodo(String id) async {
-    state = state.where((t) => t.id != id).toList();
-    await _todoBox.delete(id);
     try {
-      await _firebaseService.deleteTodo(id);
+      // Delete from Firestore
+      await _firestore.collection('todos').doc(id).delete();
+      
+      // Delete from local storage
+      await _localBox.delete(id);
+      
+      state = state.where((todo) => todo.id != id).toList();
     } catch (e) {
-      print('Error deleting todo from Firebase: $e');
+      print('Error deleting todo: $e');
+      // If Firestore fails, just delete locally
+      await _localBox.delete(id);
+      state = state.where((todo) => todo.id != id).toList();
     }
   }
 
   Future<void> toggleTodo(String id) async {
-    final todoIndex = state.indexWhere((t) => t.id == id);
-    if (todoIndex == -1) return;
-
-    final todo = state[todoIndex];
+    final todo = state.firstWhere((t) => t.id == id);
     final updatedTodo = todo.copyWith(
       isCompleted: !todo.isCompleted,
       updatedAt: DateTime.now(),
     );
-
-    state = [
-      for (final t in state)
-        if (t.id == id) updatedTodo else t
-    ];
-    
-    await _todoBox.put(id, updatedTodo);
-    try {
-      await _firebaseService.toggleTodo(id);
-    } catch (e) {
-      print('Error toggling todo in Firebase: $e');
-    }
-  }
-
-  Future<void> refreshTodos() async {
-    try {
-      final remoteTodos = await _firebaseService.fetchInitialTodos();
-      _handleRemoteTodos(remoteTodos);
-    } catch (e) {
-      print('Error refreshing todos: $e');
-    }
+    await updateTodo(updatedTodo);
   }
 } 

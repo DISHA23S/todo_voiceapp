@@ -40,9 +40,7 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   firebase_core: ^2.24.2
-  firebase_core_web: ^2.4.1
   cloud_firestore: ^4.14.0
-  cloud_firestore_web: ^3.5.1
   google_fonts: ^6.1.0
   flutter_slidable: ^3.0.1
   shimmer: ^3.0.0
