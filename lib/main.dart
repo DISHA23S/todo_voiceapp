@@ -70,6 +70,8 @@ class HomePage extends ConsumerStatefulWidget {
 class _HomePageState extends ConsumerState<HomePage> {
   final SpeechToText _speechToText = SpeechToText();
   final FlutterTts _flutterTts = FlutterTts();
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
   bool _isListening = false;
   String _lastWords = '';
   bool _isProcessing = false;
@@ -79,6 +81,13 @@ class _HomePageState extends ConsumerState<HomePage> {
     super.initState();
     _initSpeech();
     _initTts();
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
   }
 
   void _initSpeech() async {
@@ -186,6 +195,58 @@ class _HomePageState extends ConsumerState<HomePage> {
     setState(() => _lastWords = '');
   }
 
+  Future<void> _showAddTodoDialog() async {
+    _titleController.clear();
+    _descriptionController.clear();
+    
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add New Task'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(
+                labelText: 'Title',
+                hintText: 'Enter task title',
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                hintText: 'Enter task description (optional)',
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (_titleController.text.isNotEmpty) {
+                final todo = Todo(
+                  title: _titleController.text,
+                  description: _descriptionController.text,
+                );
+                ref.read(todosProvider.notifier).addTodo(todo);
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final todos = ref.watch(todosProvider);
@@ -268,16 +329,72 @@ class _HomePageState extends ConsumerState<HomePage> {
                                 ),
                               ],
                             ),
-                            trailing: IconButton(
-                              icon: Icon(
-                                todo.isCompleted ? Icons.check_circle : Icons.check_circle_outline,
-                                color: todo.isCompleted
-                                    ? Theme.of(context).colorScheme.primary
-                                    : null,
-                              ),
-                              onPressed: () {
-                                ref.read(todosProvider.notifier).toggleTodo(todo.id);
-                              },
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit),
+                                  onPressed: () {
+                                    _titleController.text = todo.title;
+                                    _descriptionController.text = todo.description;
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: const Text('Edit Task'),
+                                        content: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            TextField(
+                                              controller: _titleController,
+                                              decoration: const InputDecoration(
+                                                labelText: 'Title',
+                                              ),
+                                            ),
+                                            const SizedBox(height: 16),
+                                            TextField(
+                                              controller: _descriptionController,
+                                              decoration: const InputDecoration(
+                                                labelText: 'Description',
+                                              ),
+                                              maxLines: 3,
+                                            ),
+                                          ],
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(context),
+                                            child: const Text('Cancel'),
+                                          ),
+                                          FilledButton(
+                                            onPressed: () {
+                                              if (_titleController.text.isNotEmpty) {
+                                                final updatedTodo = todo.copyWith(
+                                                  title: _titleController.text,
+                                                  description: _descriptionController.text,
+                                                );
+                                                ref.read(todosProvider.notifier).updateTodo(updatedTodo);
+                                                Navigator.pop(context);
+                                              }
+                                            },
+                                            child: const Text('Save'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                ),
+                                IconButton(
+                                  icon: Icon(
+                                    todo.isCompleted ? Icons.check_circle : Icons.check_circle_outline,
+                                    color: todo.isCompleted
+                                        ? Theme.of(context).colorScheme.primary
+                                        : null,
+                                  ),
+                                  onPressed: () {
+                                    ref.read(todosProvider.notifier).toggleTodo(todo.id);
+                                  },
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -323,15 +440,26 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ),
                   ),
                 const SizedBox(height: 16),
-                FloatingActionButton(
-                  onPressed: _isListening ? _stopListening : _startListening,
-                  backgroundColor: _isListening
-                      ? Theme.of(context).colorScheme.error
-                      : Theme.of(context).colorScheme.primary,
-                  child: Icon(
-                    _isListening ? Icons.mic : Icons.mic_none,
-                    color: Theme.of(context).colorScheme.onPrimary,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    FloatingActionButton(
+                      heroTag: 'add',
+                      onPressed: _showAddTodoDialog,
+                      child: const Icon(Icons.add),
+                    ),
+                    FloatingActionButton(
+                      heroTag: 'mic',
+                      onPressed: _isListening ? _stopListening : _startListening,
+                      backgroundColor: _isListening
+                          ? Theme.of(context).colorScheme.error
+                          : Theme.of(context).colorScheme.primary,
+                      child: Icon(
+                        _isListening ? Icons.mic : Icons.mic_none,
+                        color: Theme.of(context).colorScheme.onPrimary,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
