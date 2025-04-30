@@ -12,11 +12,10 @@ class FirebaseService {
   Timer? _syncTimer;
 
   Future<void> initialize() async {
-    await Firebase.initializeApp();
-    await _queueService.initialize();
-    
-    // Enable offline persistence
+    // Enable persistence before any other Firestore operations
     await _firestore.enablePersistence();
+    
+    await _queueService.initialize();
     
     // Start periodic sync check
     _syncTimer = Timer.periodic(const Duration(minutes: 1), (_) => _syncQueuedCommands());
@@ -30,10 +29,26 @@ class FirebaseService {
     });
   }
 
+  Future<List<Todo>> fetchInitialTodos() async {
+    try {
+      final snapshot = await _firestore
+          .collection(_collection)
+          .orderBy('createdAt', descending: true)
+          .get();
+      
+      return snapshot.docs
+          .map((doc) => Todo.fromJson(doc.data()))
+          .toList();
+    } catch (e) {
+      print('Error fetching initial todos: $e');
+      return [];
+    }
+  }
+
   Stream<List<Todo>> getTodosStream() {
     return _firestore
         .collection(_collection)
-        .orderBy('timestamp', descending: true)
+        .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => Todo.fromJson(doc.data()))

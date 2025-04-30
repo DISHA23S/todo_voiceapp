@@ -22,46 +22,59 @@ class TodoNotifier extends StateNotifier<List<Todo>> {
 
   final _todoBox = Hive.box<Todo>('todos');
   final _firebaseService = FirebaseService();
+  bool _isInitialized = false;
 
   Future<void> _initialize() async {
-    await _firebaseService.initialize();
+    if (_isInitialized) return;
     
-    // Load local todos
-    final localTodos = _todoBox.values.toList();
-    state = localTodos;
+    try {
+      // Initialize Firebase service
+      await _firebaseService.initialize();
+      
+      // Load local todos first
+      final localTodos = _todoBox.values.toList();
+      state = localTodos;
+      
+      // Listen to Firebase changes
+      _firebaseService.getTodosStream().listen((remoteTodos) {
+        _handleRemoteTodos(remoteTodos);
+      });
 
-    // Listen to Firebase changes
-    _firebaseService.getTodosStream().listen((remoteTodos) {
-      _handleRemoteTodos(remoteTodos);
-    });
+      // Initial fetch from Firebase
+      final initialRemoteTodos = await _firebaseService.fetchInitialTodos();
+      if (initialRemoteTodos.isNotEmpty) {
+        _handleRemoteTodos(initialRemoteTodos);
+      }
+
+      _isInitialized = true;
+    } catch (e) {
+      print('Error initializing TodoNotifier: $e');
+      // If Firebase fails, still show local todos
+      state = _todoBox.values.toList();
+    }
   }
 
   void _handleRemoteTodos(List<Todo> remoteTodos) {
     final localTodos = List<Todo>.from(state);
     final updatedTodos = <Todo>[];
+    final Map<String, Todo> todoMap = {};
 
-    // Merge remote and local todos
-    for (final remoteTodo in remoteTodos) {
-      final localIndex = localTodos.indexWhere((t) => t.id == remoteTodo.id);
-      if (localIndex >= 0) {
-        final localTodo = localTodos[localIndex];
-        // Keep the most recently updated version
-        if (remoteTodo.updatedAt.isAfter(localTodo.updatedAt)) {
-          updatedTodos.add(remoteTodo);
-        } else {
-          updatedTodos.add(localTodo);
-        }
-      } else {
-        updatedTodos.add(remoteTodo);
-      }
+    // First, add all remote todos to the map
+    for (final todo in remoteTodos) {
+      todoMap[todo.id] = todo;
     }
 
-    // Add local todos that don't exist in remote
+    // Then, add local todos that are not in remote or are more recent
     for (final localTodo in localTodos) {
-      if (!remoteTodos.any((t) => t.id == localTodo.id)) {
-        updatedTodos.add(localTodo);
+      final remoteTodo = todoMap[localTodo.id];
+      if (remoteTodo == null || localTodo.updatedAt.isAfter(remoteTodo.updatedAt)) {
+        todoMap[localTodo.id] = localTodo;
       }
     }
+
+    // Convert map back to list and sort by creation date
+    updatedTodos.addAll(todoMap.values);
+    updatedTodos.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     // Update state and local storage
     state = updatedTodos;
@@ -70,13 +83,19 @@ class TodoNotifier extends StateNotifier<List<Todo>> {
 
   Future<void> _saveToLocal(List<Todo> todos) async {
     await _todoBox.clear();
-    await _todoBox.addAll(todos);
+    for (final todo in todos) {
+      await _todoBox.put(todo.id, todo);
+    }
   }
 
   Future<void> addTodo(Todo todo) async {
     state = [...state, todo];
-    await _todoBox.add(todo);
-    await _firebaseService.addTodo(todo);
+    await _todoBox.put(todo.id, todo);
+    try {
+      await _firebaseService.addTodo(todo);
+    } catch (e) {
+      print('Error adding todo to Firebase: $e');
+    }
   }
 
   Future<void> updateTodo(Todo todo) async {
@@ -85,49 +104,53 @@ class TodoNotifier extends StateNotifier<List<Todo>> {
         if (t.id == todo.id) todo else t
     ];
     
-    final index = _todoBox.values.toList().indexWhere((t) => t.id == todo.id);
-    if (index >= 0) {
-      await _todoBox.putAt(index, todo);
+    await _todoBox.put(todo.id, todo);
+    try {
+      await _firebaseService.updateTodo(todo);
+    } catch (e) {
+      print('Error updating todo in Firebase: $e');
     }
-    
-    await _firebaseService.updateTodo(todo);
   }
 
   Future<void> deleteTodo(String id) async {
     state = state.where((t) => t.id != id).toList();
-    
-    final index = _todoBox.values.toList().indexWhere((t) => t.id == id);
-    if (index >= 0) {
-      await _todoBox.deleteAt(index);
+    await _todoBox.delete(id);
+    try {
+      await _firebaseService.deleteTodo(id);
+    } catch (e) {
+      print('Error deleting todo from Firebase: $e');
     }
-    
-    await _firebaseService.deleteTodo(id);
   }
 
   Future<void> toggleTodo(String id) async {
+    final todoIndex = state.indexWhere((t) => t.id == id);
+    if (todoIndex == -1) return;
+
+    final todo = state[todoIndex];
+    final updatedTodo = todo.copyWith(
+      isCompleted: !todo.isCompleted,
+      updatedAt: DateTime.now(),
+    );
+
     state = [
-      for (final todo in state)
-        if (todo.id == id)
-          todo.copyWith(
-            isCompleted: !todo.isCompleted,
-            updatedAt: DateTime.now(),
-          )
-        else
-          todo
+      for (final t in state)
+        if (t.id == id) updatedTodo else t
     ];
     
-    final index = _todoBox.values.toList().indexWhere((t) => t.id == id);
-    if (index >= 0) {
-      final todo = _todoBox.getAt(index)!;
-      await _todoBox.putAt(
-        index,
-        todo.copyWith(
-          isCompleted: !todo.isCompleted,
-          updatedAt: DateTime.now(),
-        ),
-      );
+    await _todoBox.put(id, updatedTodo);
+    try {
+      await _firebaseService.toggleTodo(id);
+    } catch (e) {
+      print('Error toggling todo in Firebase: $e');
     }
-    
-    await _firebaseService.toggleTodo(id);
+  }
+
+  Future<void> refreshTodos() async {
+    try {
+      final remoteTodos = await _firebaseService.fetchInitialTodos();
+      _handleRemoteTodos(remoteTodos);
+    } catch (e) {
+      print('Error refreshing todos: $e');
+    }
   }
 } 
