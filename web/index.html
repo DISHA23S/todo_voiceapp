@@ -18,10 +18,10 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="A voice-driven to-do list application.">
 
   <!-- iOS meta tags & icons -->
-  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="todo_voiceapp">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
@@ -29,10 +29,60 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>todo_voiceapp</title>
+  <title>Voice To-Do</title>
   <link rel="manifest" href="manifest.json">
+
+  <script>
+    // The value below is injected by flutter build, do not touch.
+    const serviceWorkerVersion = null;
+  </script>
+  <!-- This script adds the flutter initialization JS code -->
+  <script src="flutter.js" defer></script>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.0/firebase-firestore.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyDRXWaaPPnOe79TAGycOQP5GpwrEoWASUU",
+      authDomain: "todoapp-177c5.firebaseapp.com",
+      projectId: "todoapp-177c5",
+      storageBucket: "todoapp-177c5.firebasestorage.app",
+      messagingSenderId: "1016968248373",
+      appId: "1:1016968248373:web:2ef812c60a81b5550d857c"
+    };
+    
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    
+    // Enable offline persistence
+    firebase.firestore().enablePersistence()
+      .catch((err) => {
+        if (err.code === 'failed-precondition') {
+          // Multiple tabs open, persistence can only be enabled in one tab at a time.
+          console.log('Persistence failed: Multiple tabs open');
+        } else if (err.code === 'unimplemented') {
+          // The current browser does not support all of the features required for persistence
+          console.log('Persistence not supported by browser');
+        }
+      });
+  </script>
 </head>
 <body>
-  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    window.addEventListener('load', function(ev) {
+      // Download main.dart.js
+      _flutter.loader.loadEntrypoint({
+        serviceWorker: {
+          serviceWorkerVersion: serviceWorkerVersion,
+        },
+        onEntrypointLoaded: function(engineInitializer) {
+          engineInitializer.initializeEngine().then(function(appRunner) {
+            appRunner.runApp();
+          });
+        }
+      });
+    });
+  </script>
 </body>
 </html>

@@ -7,16 +7,28 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'models/todo_model.dart';
 import 'providers/todo_provider.dart';
 import 'services/voice_command_parser.dart';
+import 'services/firebase_service.dart';
+import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Hive
   await Hive.initFlutter();
   Hive.registerAdapter(TodoAdapter());
   await Hive.openBox<Todo>('todos');
+  
+  // Initialize Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  
   runApp(const ProviderScope(child: MyApp()));
 }
 

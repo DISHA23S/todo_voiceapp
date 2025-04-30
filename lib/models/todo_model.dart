@@ -54,4 +54,28 @@ class Todo {
       isSynced: isSynced ?? this.isSynced,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'isCompleted': isCompleted,
+      'createdAt': createdAt.toIso8601String(),
+      'completedAt': completedAt?.toIso8601String(),
+      'isSynced': isSynced,
+    };
+  }
+
+  factory Todo.fromJson(Map<String, dynamic> json) {
+    return Todo(
+      id: json['id'],
+      title: json['title'],
+      description: json['description'],
+      isCompleted: json['isCompleted'],
+      createdAt: DateTime.parse(json['createdAt']),
+      completedAt: json['completedAt'] != null ? DateTime.parse(json['completedAt']) : null,
+      isSynced: json['isSynced'],
+    );
+  }
 } 
