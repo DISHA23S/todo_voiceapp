@@ -11,84 +11,123 @@ final todoBoxProvider = FutureProvider<Box<Todo>>((ref) async {
   return Hive.box<Todo>('todos');
 });
 
-final todosProvider = StateNotifierProvider<TodosNotifier, List<Todo>>((ref) {
-  final box = ref.watch(todoBoxProvider).value;
-  final firebaseService = ref.watch(firebaseServiceProvider);
-  return TodosNotifier(box, firebaseService);
+final todosProvider = StateNotifierProvider<TodoNotifier, List<Todo>>((ref) {
+  return TodoNotifier();
 });
 
-class TodosNotifier extends StateNotifier<List<Todo>> {
-  final Box<Todo>? _box;
-  final FirebaseService _firebaseService;
-  bool _isInitialized = false;
-
-  TodosNotifier(this._box, this._firebaseService) : super(_box?.values.toList() ?? []) {
+class TodoNotifier extends StateNotifier<List<Todo>> {
+  TodoNotifier() : super([]) {
     _initialize();
   }
 
+  final _todoBox = Hive.box<Todo>('todos');
+  final _firebaseService = FirebaseService();
+
   Future<void> _initialize() async {
-    if (_isInitialized) return;
+    await _firebaseService.initialize();
     
+    // Load local todos
+    final localTodos = _todoBox.values.toList();
+    state = localTodos;
+
     // Listen to Firebase changes
-    _firebaseService.getTodosStream().listen((firebaseTodos) {
-      if (_box != null) {
-        // Update local storage with Firebase data
-        for (final todo in firebaseTodos) {
-          _box!.put(todo.id, todo);
-        }
-        state = _box!.values.toList();
-      }
+    _firebaseService.getTodosStream().listen((remoteTodos) {
+      _handleRemoteTodos(remoteTodos);
     });
+  }
 
-    // Sync local changes to Firebase
-    _box?.watch().listen((event) {
-      if (event.deleted) {
-        _firebaseService.deleteTodo(event.key as String);
+  void _handleRemoteTodos(List<Todo> remoteTodos) {
+    final localTodos = List<Todo>.from(state);
+    final updatedTodos = <Todo>[];
+
+    // Merge remote and local todos
+    for (final remoteTodo in remoteTodos) {
+      final localIndex = localTodos.indexWhere((t) => t.id == remoteTodo.id);
+      if (localIndex >= 0) {
+        final localTodo = localTodos[localIndex];
+        // Keep the most recently updated version
+        if (remoteTodo.updatedAt.isAfter(localTodo.updatedAt)) {
+          updatedTodos.add(remoteTodo);
+        } else {
+          updatedTodos.add(localTodo);
+        }
       } else {
-        final todo = event.value as Todo;
-        if (!todo.isSynced) {
-          _firebaseService.updateTodo(todo.copyWith(isSynced: true));
-        }
+        updatedTodos.add(remoteTodo);
       }
-    });
+    }
 
-    _isInitialized = true;
+    // Add local todos that don't exist in remote
+    for (final localTodo in localTodos) {
+      if (!remoteTodos.any((t) => t.id == localTodo.id)) {
+        updatedTodos.add(localTodo);
+      }
+    }
+
+    // Update state and local storage
+    state = updatedTodos;
+    _saveToLocal(updatedTodos);
   }
 
-  void addTodo(Todo todo) {
-    _box?.put(todo.id, todo);
-    _firebaseService.addTodo(todo);
+  Future<void> _saveToLocal(List<Todo> todos) async {
+    await _todoBox.clear();
+    await _todoBox.addAll(todos);
   }
 
-  void updateTodo(Todo todo) {
-    _box?.put(todo.id, todo);
-    _firebaseService.updateTodo(todo);
+  Future<void> addTodo(Todo todo) async {
+    state = [...state, todo];
+    await _todoBox.add(todo);
+    await _firebaseService.addTodo(todo);
   }
 
-  void deleteTodo(String id) {
-    _box?.delete(id);
-    _firebaseService.deleteTodo(id);
+  Future<void> updateTodo(Todo todo) async {
+    state = [
+      for (final t in state)
+        if (t.id == todo.id) todo else t
+    ];
+    
+    final index = _todoBox.values.toList().indexWhere((t) => t.id == todo.id);
+    if (index >= 0) {
+      await _todoBox.putAt(index, todo);
+    }
+    
+    await _firebaseService.updateTodo(todo);
   }
 
-  void toggleTodo(String id) {
-    final todo = _box?.get(id);
-    if (todo != null) {
-      final updatedTodo = todo.copyWith(
-        isCompleted: !todo.isCompleted,
-        completedAt: !todo.isCompleted ? DateTime.now() : null,
+  Future<void> deleteTodo(String id) async {
+    state = state.where((t) => t.id != id).toList();
+    
+    final index = _todoBox.values.toList().indexWhere((t) => t.id == id);
+    if (index >= 0) {
+      await _todoBox.deleteAt(index);
+    }
+    
+    await _firebaseService.deleteTodo(id);
+  }
+
+  Future<void> toggleTodo(String id) async {
+    state = [
+      for (final todo in state)
+        if (todo.id == id)
+          todo.copyWith(
+            isCompleted: !todo.isCompleted,
+            updatedAt: DateTime.now(),
+          )
+        else
+          todo
+    ];
+    
+    final index = _todoBox.values.toList().indexWhere((t) => t.id == id);
+    if (index >= 0) {
+      final todo = _todoBox.getAt(index)!;
+      await _todoBox.putAt(
+        index,
+        todo.copyWith(
+          isCompleted: !todo.isCompleted,
+          updatedAt: DateTime.now(),
+        ),
       );
-      _box?.put(id, updatedTodo);
-      _firebaseService.updateTodo(updatedTodo);
     }
-  }
-
-  Future<void> syncTodos(List<Todo> todos) async {
-    if (_box != null) {
-      for (final todo in todos) {
-        _box!.put(todo.id, todo);
-      }
-      state = _box!.values.toList();
-    }
-    await _firebaseService.syncTodos(todos);
+    
+    await _firebaseService.toggleTodo(id);
   }
 } 

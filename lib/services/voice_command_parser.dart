@@ -2,18 +2,18 @@ import '../models/todo_model.dart';
 
 class VoiceCommandParser {
   static Todo? parseCreateCommand(String command) {
-    final createPattern = RegExp(r'create|add|new|make|add task|create task', caseSensitive: false);
+    final createPattern = RegExp(r'create|add|new|make|add task|create task|create new', caseSensitive: false);
     if (!createPattern.hasMatch(command)) return null;
 
-    final titlePattern = RegExp(r'title\s*:\s*([^,]+)|task\s*:\s*([^,]+)|about\s*:\s*([^,]+)', caseSensitive: false);
-    final descriptionPattern = RegExp(r'description\s*:\s*([^,]+)|details\s*:\s*([^,]+)|note\s*:\s*([^,]+)', caseSensitive: false);
+    final titlePattern = RegExp(r'title\s*:\s*([^,]+)|task\s*:\s*([^,]+)|about\s*:\s*([^,]+)|called\s*:\s*([^,]+)', caseSensitive: false);
+    final descriptionPattern = RegExp(r'description\s*:\s*([^,]+)|details\s*:\s*([^,]+)|note\s*:\s*([^,]+)|with\s*:\s*([^,]+)', caseSensitive: false);
 
     final titleMatch = titlePattern.firstMatch(command);
     final descriptionMatch = descriptionPattern.firstMatch(command);
 
     String? title;
     if (titleMatch != null) {
-      title = titleMatch.group(1) ?? titleMatch.group(2) ?? titleMatch.group(3);
+      title = titleMatch.group(1) ?? titleMatch.group(2) ?? titleMatch.group(3) ?? titleMatch.group(4);
     } else {
       final words = command.split(' ');
       final createIndex = words.indexWhere((word) => createPattern.hasMatch(word));
@@ -26,7 +26,7 @@ class VoiceCommandParser {
 
     String? description;
     if (descriptionMatch != null) {
-      description = descriptionMatch.group(1) ?? descriptionMatch.group(2) ?? descriptionMatch.group(3);
+      description = descriptionMatch.group(1) ?? descriptionMatch.group(2) ?? descriptionMatch.group(3) ?? descriptionMatch.group(4);
     }
 
     return Todo(
@@ -36,14 +36,14 @@ class VoiceCommandParser {
   }
 
   static String? parseDeleteCommand(String command) {
-    final deletePattern = RegExp(r'delete|remove|erase|remove task|delete task', caseSensitive: false);
+    final deletePattern = RegExp(r'delete|remove|erase|remove task|delete task|get rid of', caseSensitive: false);
     if (!deletePattern.hasMatch(command)) return null;
 
-    final titlePattern = RegExp(r'title\s*:\s*([^,]+)|task\s*:\s*([^,]+)|about\s*:\s*([^,]+)', caseSensitive: false);
+    final titlePattern = RegExp(r'title\s*:\s*([^,]+)|task\s*:\s*([^,]+)|about\s*:\s*([^,]+)|called\s*:\s*([^,]+)', caseSensitive: false);
     final titleMatch = titlePattern.firstMatch(command);
 
     if (titleMatch != null) {
-      return titleMatch.group(1) ?? titleMatch.group(2) ?? titleMatch.group(3);
+      return titleMatch.group(1) ?? titleMatch.group(2) ?? titleMatch.group(3) ?? titleMatch.group(4);
     }
 
     final words = command.split(' ');
@@ -56,14 +56,14 @@ class VoiceCommandParser {
   }
 
   static String? parseCompleteCommand(String command) {
-    final completePattern = RegExp(r'complete|finish|done|mark as done|complete task|finish task', caseSensitive: false);
+    final completePattern = RegExp(r'complete|finish|done|mark as done|complete task|finish task|mark complete', caseSensitive: false);
     if (!completePattern.hasMatch(command)) return null;
 
-    final titlePattern = RegExp(r'title\s*:\s*([^,]+)|task\s*:\s*([^,]+)|about\s*:\s*([^,]+)', caseSensitive: false);
+    final titlePattern = RegExp(r'title\s*:\s*([^,]+)|task\s*:\s*([^,]+)|about\s*:\s*([^,]+)|called\s*:\s*([^,]+)', caseSensitive: false);
     final titleMatch = titlePattern.firstMatch(command);
 
     if (titleMatch != null) {
-      return titleMatch.group(1) ?? titleMatch.group(2) ?? titleMatch.group(3);
+      return titleMatch.group(1) ?? titleMatch.group(2) ?? titleMatch.group(3) ?? titleMatch.group(4);
     }
 
     final words = command.split(' ');
@@ -76,12 +76,12 @@ class VoiceCommandParser {
   }
 
   static (String?, String?, String?)? parseUpdateCommand(String command) {
-    final updatePattern = RegExp(r'update|modify|change|edit|update task|modify task', caseSensitive: false);
+    final updatePattern = RegExp(r'update|modify|change|edit|update task|modify task|rename', caseSensitive: false);
     if (!updatePattern.hasMatch(command)) return null;
 
-    final oldTitlePattern = RegExp(r'old title\s*:\s*([^,]+)|current task\s*:\s*([^,]+)', caseSensitive: false);
-    final newTitlePattern = RegExp(r'new title\s*:\s*([^,]+)|updated task\s*:\s*([^,]+)', caseSensitive: false);
-    final newDescriptionPattern = RegExp(r'new description\s*:\s*([^,]+)|updated details\s*:\s*([^,]+)', caseSensitive: false);
+    final oldTitlePattern = RegExp(r'old title\s*:\s*([^,]+)|current task\s*:\s*([^,]+)|task\s*:\s*([^,]+)|called\s*:\s*([^,]+)', caseSensitive: false);
+    final newTitlePattern = RegExp(r'new title\s*:\s*([^,]+)|updated task\s*:\s*([^,]+)|to\s*:\s*([^,]+)|as\s*:\s*([^,]+)', caseSensitive: false);
+    final newDescriptionPattern = RegExp(r'new description\s*:\s*([^,]+)|updated details\s*:\s*([^,]+)|details\s*:\s*([^,]+)|with\s*:\s*([^,]+)', caseSensitive: false);
 
     final oldTitleMatch = oldTitlePattern.firstMatch(command);
     final newTitleMatch = newTitlePattern.firstMatch(command);
@@ -89,12 +89,15 @@ class VoiceCommandParser {
 
     String? oldTitle;
     if (oldTitleMatch != null) {
-      oldTitle = oldTitleMatch.group(1) ?? oldTitleMatch.group(2);
+      oldTitle = oldTitleMatch.group(1) ?? oldTitleMatch.group(2) ?? oldTitleMatch.group(3) ?? oldTitleMatch.group(4);
     } else {
       final words = command.split(' ');
       final updateIndex = words.indexWhere((word) => updatePattern.hasMatch(word));
       if (updateIndex != -1 && updateIndex + 1 < words.length) {
-        oldTitle = words.sublist(updateIndex + 1).join(' ');
+        oldTitle = words.sublist(updateIndex + 1).takeWhile((word) => 
+          !newTitlePattern.hasMatch(word) && 
+          !newDescriptionPattern.hasMatch(word)
+        ).join(' ');
       }
     }
 
@@ -102,12 +105,12 @@ class VoiceCommandParser {
 
     String? newTitle;
     if (newTitleMatch != null) {
-      newTitle = newTitleMatch.group(1) ?? newTitleMatch.group(2);
+      newTitle = newTitleMatch.group(1) ?? newTitleMatch.group(2) ?? newTitleMatch.group(3) ?? newTitleMatch.group(4);
     }
 
     String? newDescription;
     if (newDescriptionMatch != null) {
-      newDescription = newDescriptionMatch.group(1) ?? newDescriptionMatch.group(2);
+      newDescription = newDescriptionMatch.group(1) ?? newDescriptionMatch.group(2) ?? newDescriptionMatch.group(3) ?? newDescriptionMatch.group(4);
     }
 
     return (oldTitle.trim(), newTitle?.trim(), newDescription?.trim());

@@ -13,7 +13,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'models/todo_model.dart';
 import 'providers/todo_provider.dart';
 import 'services/voice_command_parser.dart';
-import 'services/firebase_service.dart';
+import 'services/voice_feedback_service.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -69,35 +69,32 @@ class HomePage extends ConsumerStatefulWidget {
 
 class _HomePageState extends ConsumerState<HomePage> {
   final SpeechToText _speechToText = SpeechToText();
-  final FlutterTts _flutterTts = FlutterTts();
+  final VoiceFeedbackService _voiceFeedback = VoiceFeedbackService();
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   bool _isListening = false;
   String _lastWords = '';
   bool _isProcessing = false;
+  bool _isOffline = false;
 
   @override
   void initState() {
     super.initState();
-    _initSpeech();
-    _initTts();
+    _initServices();
+  }
+
+  Future<void> _initServices() async {
+    await _speechToText.initialize();
+    await _voiceFeedback.initialize();
+    setState(() {});
   }
 
   @override
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
+    _voiceFeedback.dispose();
     super.dispose();
-  }
-
-  void _initSpeech() async {
-    await _speechToText.initialize();
-    setState(() {});
-  }
-
-  void _initTts() async {
-    await _flutterTts.setLanguage('en-US');
-    await _flutterTts.setSpeechRate(0.5);
   }
 
   void _startListening() async {
@@ -126,73 +123,120 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     setState(() => _isProcessing = true);
 
-    // Try to parse the command
-    final todo = VoiceCommandParser.parseCreateCommand(_lastWords);
-    if (todo != null) {
-      ref.read(todosProvider.notifier).addTodo(todo);
-      await _flutterTts.speak('Task added: ${todo.title}');
-      setState(() => _lastWords = '');
-      return;
-    }
-
-    final deleteTitle = VoiceCommandParser.parseDeleteCommand(_lastWords);
-    if (deleteTitle != null) {
-      final todos = ref.read(todosProvider);
-      final todo = todos.firstWhere(
-        (t) => t.title.toLowerCase() == deleteTitle.toLowerCase(),
-        orElse: () => Todo(title: '', description: ''),
-      );
-      if (todo.id.isNotEmpty) {
-        ref.read(todosProvider.notifier).deleteTodo(todo.id);
-        await _flutterTts.speak('Task deleted: ${todo.title}');
-      } else {
-        await _flutterTts.speak('Task not found');
+    try {
+      // Try to parse the command
+      final todo = VoiceCommandParser.parseCreateCommand(_lastWords);
+      if (todo != null) {
+        ref.read(todosProvider.notifier).addTodo(todo);
+        await _voiceFeedback.confirmTaskCreation(todo.title);
+        if (_isOffline) {
+          await _voiceFeedback.notifyOffline();
+        }
+        setState(() => _lastWords = '');
+        return;
       }
-      setState(() => _lastWords = '');
-      return;
-    }
 
-    final completeTitle = VoiceCommandParser.parseCompleteCommand(_lastWords);
-    if (completeTitle != null) {
-      final todos = ref.read(todosProvider);
-      final todo = todos.firstWhere(
-        (t) => t.title.toLowerCase() == completeTitle.toLowerCase(),
-        orElse: () => Todo(title: '', description: ''),
-      );
-      if (todo.id.isNotEmpty) {
-        ref.read(todosProvider.notifier).toggleTodo(todo.id);
-        await _flutterTts.speak('Task marked as completed: ${todo.title}');
-      } else {
-        await _flutterTts.speak('Task not found');
-      }
-      setState(() => _lastWords = '');
-      return;
-    }
-
-    final updateCommand = VoiceCommandParser.parseUpdateCommand(_lastWords);
-    if (updateCommand != null) {
-      final (oldTitle, newTitle, newDescription) = updateCommand;
-      final todos = ref.read(todosProvider);
-      final todo = todos.firstWhere(
-        (t) => t.title.toLowerCase() == oldTitle?.toLowerCase(),
-        orElse: () => Todo(title: '', description: ''),
-      );
-      if (todo.id.isNotEmpty) {
-        final updatedTodo = todo.copyWith(
-          title: newTitle ?? todo.title,
-          description: newDescription ?? todo.description,
+      final deleteTitle = VoiceCommandParser.parseDeleteCommand(_lastWords);
+      if (deleteTitle != null) {
+        final todos = ref.read(todosProvider);
+        final todo = todos.firstWhere(
+          (t) => t.title.toLowerCase().contains(deleteTitle.toLowerCase()),
+          orElse: () => Todo(title: '', description: ''),
         );
-        ref.read(todosProvider.notifier).updateTodo(updatedTodo);
-        await _flutterTts.speak('Task updated: ${updatedTodo.title}');
-      } else {
-        await _flutterTts.speak('Task not found');
+        if (todo.id.isNotEmpty) {
+          ref.read(todosProvider.notifier).deleteTodo(todo.id);
+          await _voiceFeedback.confirmTaskDeletion(todo.title);
+          if (_isOffline) {
+            await _voiceFeedback.notifyOffline();
+          }
+        } else {
+          await _voiceFeedback.notifyError('Task not found: $deleteTitle');
+        }
+        setState(() => _lastWords = '');
+        return;
       }
-      setState(() => _lastWords = '');
-      return;
-    }
 
-    await _flutterTts.speak('I could not understand that command. Please try again.');
-    setState(() => _lastWords = '');
+      final completeTitle = VoiceCommandParser.parseCompleteCommand(_lastWords);
+      if (completeTitle != null) {
+        final todos = ref.read(todosProvider);
+        final todo = todos.firstWhere(
+          (t) => t.title.toLowerCase().contains(completeTitle.toLowerCase()),
+          orElse: () => Todo(title: '', description: ''),
+        );
+        if (todo.id.isNotEmpty) {
+          ref.read(todosProvider.notifier).toggleTodo(todo.id);
+          await _voiceFeedback.confirmTaskCompletion(todo.title, !todo.isCompleted);
+          if (_isOffline) {
+            await _voiceFeedback.notifyOffline();
+          }
+        } else {
+          await _voiceFeedback.notifyError('Task not found: $completeTitle');
+        }
+        setState(() => _lastWords = '');
+        return;
+      }
+
+      final updateCommand = VoiceCommandParser.parseUpdateCommand(_lastWords);
+      if (updateCommand != null) {
+        final (oldTitle, newTitle, newDescription) = updateCommand;
+        if (oldTitle == null) {
+          await _voiceFeedback.notifyError('Could not understand which task to update');
+          setState(() => _lastWords = '');
+          return;
+        }
+
+        final todos = ref.read(todosProvider);
+        final todo = todos.firstWhere(
+          (t) => t.title.toLowerCase().contains(oldTitle.toLowerCase()),
+          orElse: () => Todo(title: '', description: ''),
+        );
+
+        if (todo.id.isNotEmpty) {
+          if (newTitle == null && newDescription == null) {
+            await _voiceFeedback.notifyError('Please specify new title or description');
+            return;
+          }
+
+          final updatedTodo = todo.copyWith(
+            title: newTitle ?? todo.title,
+            description: newDescription ?? todo.description,
+            updatedAt: DateTime.now(),
+          );
+
+          ref.read(todosProvider.notifier).updateTodo(updatedTodo);
+          await _voiceFeedback.confirmTaskUpdate(updatedTodo.title);
+          
+          // Provide detailed feedback about what was updated
+          if (newTitle != null && newDescription != null) {
+            await _voiceFeedback.speak('Updated title and description');
+          } else if (newTitle != null) {
+            await _voiceFeedback.speak('Updated title to: $newTitle');
+          } else if (newDescription != null) {
+            await _voiceFeedback.speak('Updated description to: $newDescription');
+          }
+
+          if (_isOffline) {
+            await _voiceFeedback.notifyOffline();
+          }
+        } else {
+          await _voiceFeedback.notifyError('Task not found: $oldTitle');
+        }
+        setState(() => _lastWords = '');
+        return;
+      }
+
+      // If no command was recognized
+      await _voiceFeedback.speak('I heard: $_lastWords');
+      await _voiceFeedback.requestClarification();
+      await _voiceFeedback.speak('Try saying: "update task [old title] to [new title]" or "change task [name] with [new description]"');
+    } catch (e) {
+      await _voiceFeedback.notifyError('An error occurred while processing your command');
+    } finally {
+      setState(() {
+        _lastWords = '';
+        _isProcessing = false;
+      });
+    }
   }
 
   Future<void> _showAddTodoDialog() async {

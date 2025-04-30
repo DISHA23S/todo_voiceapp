@@ -21,27 +21,32 @@ class Todo {
   final DateTime createdAt;
 
   @HiveField(5)
-  final DateTime? completedAt;
+  final DateTime updatedAt;
 
   @HiveField(6)
+  final DateTime? completedAt;
+
+  @HiveField(7)
   final bool isSynced;
 
   Todo({
     String? id,
     required this.title,
-    required this.description,
+    this.description = '',
     this.isCompleted = false,
     DateTime? createdAt,
+    DateTime? updatedAt,
     this.completedAt,
     this.isSynced = false,
   })  : id = id ?? const Uuid().v4(),
-        createdAt = createdAt ?? DateTime.now();
+        createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now();
 
   Todo copyWith({
     String? title,
     String? description,
     bool? isCompleted,
-    DateTime? completedAt,
+    DateTime? updatedAt,
     bool? isSynced,
   }) {
     return Todo(
@@ -50,7 +55,8 @@ class Todo {
       description: description ?? this.description,
       isCompleted: isCompleted ?? this.isCompleted,
       createdAt: createdAt,
-      completedAt: completedAt ?? this.completedAt,
+      updatedAt: updatedAt ?? DateTime.now(),
+      completedAt: completedAt,
       isSynced: isSynced ?? this.isSynced,
     );
   }
@@ -62,6 +68,7 @@ class Todo {
       'description': description,
       'isCompleted': isCompleted,
       'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
       'completedAt': completedAt?.toIso8601String(),
       'isSynced': isSynced,
     };
@@ -69,13 +76,14 @@ class Todo {
 
   factory Todo.fromJson(Map<String, dynamic> json) {
     return Todo(
-      id: json['id'],
-      title: json['title'],
-      description: json['description'],
-      isCompleted: json['isCompleted'],
-      createdAt: DateTime.parse(json['createdAt']),
-      completedAt: json['completedAt'] != null ? DateTime.parse(json['completedAt']) : null,
-      isSynced: json['isSynced'],
+      id: json['id'] as String,
+      title: json['title'] as String,
+      description: json['description'] as String? ?? '',
+      isCompleted: json['isCompleted'] as bool? ?? false,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      completedAt: json['completedAt'] != null ? DateTime.parse(json['completedAt'] as String) : null,
+      isSynced: json['isSynced'] as bool? ?? false,
     );
   }
 } 
